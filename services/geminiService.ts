@@ -1,25 +1,55 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TestQuestion, UserProfile } from "../types";
 
-// 1. 環境変数から複数のAPIキーを取得するロジック
-const getApiKeys = (): string[] => {
+// --- APIキーの状態管理用 ---
+interface ApiKeyStatus {
+  key: string;
+  isBroken: boolean;      // 壊れている（Open状態）か
+  lastFailureTime: number; // 最後に失敗した時間
+}
+
+const getApiKeys = (): ApiKeyStatus[] => {
   const keys = Object.entries(import.meta.env)
     .filter(([key, value]) => key.startsWith('VITE_GEMINI_API_KEY_') && value)
-    .map(([_, value]) => value as string);
-  
-  return keys.length > 0 ? keys : [import.meta.env.VITE_GEMINI_API_KEY_1]; // フォールバック
+    .map(([_, value]) => ({
+      key: value as string,
+      isBroken: false,
+      lastFailureTime: 0
+    }));
+  return keys.length > 0 ? keys : [{ key: import.meta.env.VITE_GEMINI_API_KEY_1, isBroken: false, lastFailureTime: 0 }];
 };
 
-const API_KEYS = getApiKeys();
-let currentKeyIndex = 0;
+const API_POOL = getApiKeys();
+const COOL_DOWN_MS = 1000 * 60 * 5; // 壊れたキーは5分間使わない
 
 /**
- * 使用するAPIキーを順番に切り替える（ラウンドロビン）
+ * 正常なAPIキーを選択し、インスタンスを返す
  */
-const getNextAiInstance = () => {
-  const key = API_KEYS[currentKeyIndex];
-  currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-  return new GoogleGenAI({ apiKey: key });
+const getActiveAiInstance = () => {
+  const now = Date.now();
+  
+  // 復活チェック：5分以上経過したキーは「isBroken」をリセット
+  API_POOL.forEach(s => {
+    if (s.isBroken && now - s.lastFailureTime > COOL_DOWN_MS) {
+      s.isBroken = false;
+    }
+  });
+
+  // 正常なキーだけを探す
+  const availableKeys = API_POOL.filter(s => !s.isBroken);
+  
+  // 全部全滅していたら、仕方ないので一番古いものを使う
+  const selectedStatus = availableKeys.length > 0 
+    ? availableKeys[Math.floor(Math.random() * availableKeys.length)]
+    : API_POOL.sort((a, b) => a.lastFailureTime - b.lastFailureTime)[0];
+
+  return {
+    ai: new GoogleGenAI({ apiKey: selectedStatus.key }),
+    markAsBroken: () => {
+      selectedStatus.isBroken = true;
+      selectedStatus.lastFailureTime = Date.now();
+    }
+  };
 };
 
 const MODEL_TEXT = 'gemini-3-flash-preview';
@@ -62,39 +92,35 @@ export const createChatStream = async function* (
   imageDataUrl?: string,
   userProfile?: UserProfile
 ) {
-  const maxRetries = 2;
+  const maxRetries = API_POOL.length; // キーの数だけリトライする
   let lastError: any;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const { ai, markAsBroken } = getActiveAiInstance();
     let yielded = false;
+    
     try {
-      // リトライ時も新しいインスタンス（＝次のAPIキー）を取得するようにループ内で呼ぶ
-      const ai = getNextAiInstance();
-      const systemInstruction = generateSystemInstruction(userProfile);
-
       const chat = ai.chats.create({
         model: MODEL_TEXT,
         history: history,
-        config: { systemInstruction }
+        config: { systemInstruction: "..." } // ここに先生プロンプト
       });
 
-      // ...（画像処理とメッセージ送信のロジックは変更なし）
-      
-      const result = await chat.sendMessageStream({ /* ... */ });
+      // ... (中略：メッセージ送信ロジック)
+      const result = await chat.sendMessageStream({ message: newMessage });
 
       for await (const chunk of result) {
         yielded = true;
         yield chunk.text;
       }
-      return;
-    } catch (error) {
-      if (yielded) throw error;
-      console.error(`Attempt ${attempt + 1} with Key ${currentKeyIndex} failed:`, error);
+      return; // 成功したら終了
+    } catch (error: any) {
+      if (yielded) throw error; // 途中まで出力してたらリトライしない
+      
+      console.error(`Key error, marking as broken:`, error);
+      markAsBroken(); // このキーを「故障中」に設定
       lastError = error;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
     }
   }
   throw lastError;
 };
-
-// generateTestQuestions も同様に getNextAiInstance() を使うよう修正
