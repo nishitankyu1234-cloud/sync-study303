@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import { APP_THEME, SUBJECTS } from '../constants';
 import { generateTestQuestions } from '../services/geminiService';
 import { TestQuestion, UserProfile, TestResult, Subject } from '../types';
-import { CheckCircle2, XCircle, ArrowRight, RefreshCcw, FileCheck, School, History, TrendingUp, ChevronLeft, BrainCircuit, Sparkles } from 'lucide-react';
+import { CheckCircle2, XCircle, ArrowRight, RefreshCcw, FileCheck, School, History, TrendingUp, ChevronLeft, BrainCircuit } from 'lucide-react';
 
 interface TestViewProps {
   userProfile: UserProfile;
@@ -225,7 +225,7 @@ export const TestView: React.FC<TestViewProps> = ({ userProfile, history, onSave
         <div>
           <h3 className="text-xl font-bold text-slate-900">問題を作成中...</h3>
           <p className="text-slate-500 mt-2">
-            AI講師が「{topic}」の{userProfile.targetUniversity ? `${userProfile.targetUniversity}対策` : ''}問題を厳選し、ファクトチェックを行っています
+            AI講師が「{topic}」の{userProfile.targetUniversity ? `${userProfile.targetUniversity}対策` : ''}問題を厳選しています
           </p>
         </div>
       </div>
@@ -581,18 +581,12 @@ export const TestView: React.FC<TestViewProps> = ({ userProfile, history, onSave
         </div>
       </div>
 
-        <div className="mb-8 flex flex-col items-center">
-          <h2 className="text-2xl font-bold text-slate-900 mb-2">
-            {score === (questions?.length || 0) ? '完璧です！素晴らしい！🎉' : 'お疲れ様でした！'}
-          </h2>
-          <div className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-green-600 rounded-full border border-green-100 mb-4">
-            <Sparkles size={10} />
-            <span className="text-[10px] font-bold uppercase">Fact-Checked by AI</span>
-          </div>
-          <p className="text-slate-500 mb-4">
-            {(questions?.length || 0)}問中 {score}問正解しました
-          </p>
-        </div>
+      <h2 className="text-2xl font-bold text-slate-900 mb-2">
+        {score === (questions?.length || 0) ? '完璧です！素晴らしい！🎉' : 'お疲れ様でした！'}
+      </h2>
+      <p className="text-slate-500 mb-8">
+        {(questions?.length || 0)}問中 {score}問正解しました
+      </p>
 
       <div className="flex gap-4">
         <button
