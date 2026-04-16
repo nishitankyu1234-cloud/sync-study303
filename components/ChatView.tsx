@@ -241,15 +241,9 @@ export const ChatView: React.FC<ChatViewProps> = ({ initialContext, userProfile,
                   )}
                 </div>
                 {msg.role === 'model' && !msg.isLoading && (
-                   <div className="flex items-center gap-2 mt-1">
-                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1">
-                       Elite AI Lecturer
-                     </p>
-                     <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-50 text-green-600 rounded-full border border-green-100">
-                        <Sparkles size={8} />
-                        <span className="text-[8px] font-bold uppercase">Fact-Checked</span>
-                     </div>
-                   </div>
+                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1 mt-1">
+                     Elite AI Lecturer
+                   </p>
                 )}
               </div>
             </div>
